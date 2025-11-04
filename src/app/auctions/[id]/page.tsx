@@ -38,16 +38,19 @@ export default function AuctionDetailPage() {
   const { data: auction, isLoading, error } = useQuery({
     queryKey: ['auction', auctionId],
     queryFn: () => auctionsApi.getById(auctionId),
-    // Reduced refetch interval since we have WebSocket
     refetchInterval: 30000, // 30 seconds as fallback
+    refetchOnWindowFocus: false, // Prevent refetch on window focus
+    staleTime: 10000, // Consider data fresh for 10 seconds
   })
 
-  // Fetch bids for this auction
+  // Fetch bids for this auction with pagination
   const { data: bidsData } = useQuery({
-    queryKey: ['bids', auctionId],
-    queryFn: () => bidsApi.getByAuctionId(auctionId),
-    enabled: !!auctionId, // Only fetch when we have an auction ID
-    refetchInterval: 30000, // 30 seconds as fallback
+    queryKey: ['bids', auctionId, 1, 20], // page 1, limit 20
+    queryFn: () => bidsApi.getByAuctionId(auctionId, { page: 1, limit: 20 }),
+    enabled: !!auctionId,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: false, // Prevent refetch on window focus
+    staleTime: 10000, // Consider data fresh for 10 seconds
   })
 
   useEffect(() => {
@@ -89,7 +92,8 @@ export default function AuctionDetailPage() {
   const canBid = isAuthenticated && isRunning && user?.id !== auction.item?.sellerId
 
   // Get bids array from fetched data
-  const bids = bidsData || []
+  const bids = bidsData?.bids || []
+  const totalBidsInDB = bidsData?.total || 0
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -139,11 +143,26 @@ export default function AuctionDetailPage() {
               {auction.item?.metadata && Object.keys(auction.item.metadata).length > 0 && (
                 <div>
                   <h3 className="font-semibold mb-2">Item Details</h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {Object.entries(auction.item.metadata).map(([key, value]) => (
-                      <div key={key} className="bg-slate-50 p-3 rounded">
-                        <div className="text-xs text-muted-foreground capitalize">{key}</div>
-                        <div className="font-medium">{String(value)}</div>
+                      <div key={key} className="bg-slate-50 p-3 rounded break-words">
+                        <div className="text-xs text-muted-foreground capitalize mb-1">{key}</div>
+                        <div className="font-medium text-sm break-all overflow-hidden">
+                          {typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://')) ? (
+                            <a 
+                              href={value} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 underline"
+                            >
+                              {value.length > 50 ? `${value.substring(0, 50)}...` : value}
+                            </a>
+                          ) : typeof value === 'object' ? (
+                            <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(value, null, 2)}</pre>
+                          ) : (
+                            String(value)
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -187,6 +206,8 @@ export default function AuctionDetailPage() {
               <BidHistory 
                 bids={bids}
                 currentHighestBidId={auction.currentHighestBid?.id || auction.currentBid?.id}
+                auctionId={auctionId}
+                totalBids={totalBidsInDB}
               />
             </CardContent>
           </Card>

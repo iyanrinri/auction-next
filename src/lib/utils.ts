@@ -20,6 +20,13 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date))
 }
 
+export function formatDateTime(date: string | Date): string {
+  return new Intl.DateTimeFormat('id-ID', {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  }).format(new Date(date))
+}
+
 export function getTimeRemaining(endTime: string | Date) {
   const total = Date.parse(endTime.toString()) - Date.now()
   const seconds = Math.floor((total / 1000) % 60)

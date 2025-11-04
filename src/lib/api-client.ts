@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+// Use relative URL to proxy through Next.js API routes
+const API_URL = '/api'
 
 export const apiClient = axios.create({
   baseURL: API_URL,

@@ -26,8 +26,21 @@ export const bidsApi = {
   },
 
   // Public endpoint - no auth required
-  getByAuctionId: async (auctionId: string): Promise<Bid[]> => {
-    const response = await apiClient.get(`/bids/auction/${auctionId}`)
+  getByAuctionId: async (
+    auctionId: string, 
+    params?: {
+      page?: number
+      limit?: number
+    }
+  ): Promise<PaginatedResponse<Bid>> => {
+    const cleanParams: Record<string, string | number> = {}
+    
+    if (params?.page !== undefined) cleanParams.page = params.page
+    if (params?.limit !== undefined) cleanParams.limit = params.limit
+    
+    const response = await apiClient.get(`/bids/auction/${auctionId}`, {
+      params: cleanParams
+    })
     return response.data
   },
 

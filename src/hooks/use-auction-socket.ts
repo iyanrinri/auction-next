@@ -48,10 +48,47 @@ export const useAuctionSocket = (auctionId?: string) => {
       
       setCurrentBid(data.bid.amount)
       
-      // Invalidate queries to refetch latest data
-      queryClient.invalidateQueries({ queryKey: ['auction', auctionId] })
-      queryClient.invalidateQueries({ queryKey: ['auctions'] })
-      queryClient.invalidateQueries({ queryKey: ['bids', auctionId] })
+      // Transform bid data to match expected format
+      const transformedBid = {
+        id: data.bid.id,
+        auctionId: data.auctionId,
+        bidderId: data.bid.bidderId,
+        amount: data.bid.amount,
+        isAuto: data.bid.isAuto,
+        createdAt: data.bid.createdAt,
+        bidder: {
+          id: data.bid.bidderId,
+          name: data.bid.bidderName,
+          email: '', // Not provided by WebSocket
+        }
+      }
+      
+      // Optimistically update bids list in cache (now using pagination structure)
+      queryClient.setQueryData(['bids', auctionId, 1, 20], (oldData: any) => {
+        if (!oldData) {
+          return {
+            bids: [transformedBid],
+            total: 1,
+            page: 1,
+            limit: 20,
+            totalPages: 1
+          }
+        }
+        
+        // Check if bid already exists (prevent duplicate)
+        const bidExists = oldData.bids?.some((bid: any) => bid.id === transformedBid.id)
+        if (bidExists) {
+          console.log('Bid already exists in cache, skipping')
+          return oldData
+        }
+        
+        // Add new bid to the top of the list and increment total
+        return {
+          ...oldData,
+          bids: [transformedBid, ...(oldData.bids || [])],
+          total: oldData.total + 1
+        }
+      })
 
       toast({
         title: '💰 New Bid Placed!',
@@ -66,7 +103,7 @@ export const useAuctionSocket = (auctionId?: string) => {
       setCurrentBid(data.currentPrice)
       setBidCount(data.bidCount)
       
-      queryClient.invalidateQueries({ queryKey: ['auction', auctionId] })
+      // No need to refetch, we already have the latest data from WebSocket
     })
 
     // Listen for status changes
@@ -76,8 +113,11 @@ export const useAuctionSocket = (auctionId?: string) => {
       // Convert status to lowercase for frontend consistency
       setStatus(data.status.toLowerCase())
       
-      queryClient.invalidateQueries({ queryKey: ['auction', auctionId] })
-      queryClient.invalidateQueries({ queryKey: ['auctions'] })
+      // Only mark as stale, don't refetch
+      queryClient.invalidateQueries({ 
+        queryKey: ['auction', auctionId],
+        refetchType: 'none'
+      })
 
       let title = 'Auction Status Updated'
       let description = `Auction is now ${data.status}`

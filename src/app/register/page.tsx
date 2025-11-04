@@ -20,7 +20,6 @@ const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string(),
-  role: z.enum(['USER', 'SELLER']),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ['confirmPassword'],
@@ -40,9 +39,6 @@ export default function RegisterPage() {
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
-    defaultValues: {
-      role: 'USER',
-    },
   })
 
   const onSubmit = async (data: RegisterFormData) => {
@@ -135,21 +131,6 @@ export default function RegisterPage() {
                 />
                 {errors.confirmPassword && (
                   <p className="text-sm text-red-600">{errors.confirmPassword.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="role">Account Type</Label>
-                <select
-                  id="role"
-                  {...register('role')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="USER">Buyer</option>
-                  <option value="SELLER">Seller</option>
-                </select>
-                {errors.role && (
-                  <p className="text-sm text-red-600">{errors.role.message}</p>
                 )}
               </div>
 

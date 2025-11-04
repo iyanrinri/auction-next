@@ -42,20 +42,47 @@ export interface ViewerCountPayload {
   count: number
 }
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000'
+// Auto-detect WebSocket URL from browser location
+const getWebSocketURL = (): string => {
+  // Only run on client side
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3000'
+  }
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = window.location.hostname
+  const port = window.location.port
+  
+  // If port exists and it's not standard ports (80/443), include it
+  if (port && port !== '80' && port !== '443') {
+    // For development (e.g., localhost:3001), connect to backend port (3000)
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return `http://${host}:3000`
+    }
+    return `${protocol}//${host}:${port}`
+  }
+  
+  // For production (e.g., auction.co.id)
+  return `${protocol}//${host}`
+}
+
+const WS_URL = getWebSocketURL()
 const AUCTION_NAMESPACE = '/auctions'
 
 let socket: Socket | null = null
 
 export const getSocket = (): Socket => {
   if (!socket) {
-    socket = io(`${WS_URL}${AUCTION_NAMESPACE}`, {
+    const wsUrl = `${WS_URL}${AUCTION_NAMESPACE}`
+    console.log(`🔌 Initializing WebSocket connection to: ${wsUrl}`)
+    
+    socket = io(wsUrl, {
       autoConnect: false,
       transports: ['websocket', 'polling'],
     })
 
     socket.on('connect', () => {
-      console.log('✅ WebSocket connected to auction server')
+      console.log(`✅ WebSocket connected to: ${wsUrl}`)
     })
 
     socket.on('disconnect', () => {

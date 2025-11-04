@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -35,6 +35,8 @@ export function BidForm({
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [isAuto, setIsAuto] = useState(false)
+  const [isUpdatingForm, setIsUpdatingForm] = useState(false)
+  const [lastBidPrice, setLastBidPrice] = useState(0)
   
   const minBidAmount = currentPrice + minIncrement
 
@@ -51,17 +53,66 @@ export function BidForm({
     },
   })
 
+  // Update form value when currentPrice changes (after new bid)
+  useEffect(() => {
+    // Always update form when currentPrice changes
+    setValue('amount', minBidAmount)
+    
+    // If we're in updating state and price changed, enable button
+    if (isUpdatingForm && currentPrice !== lastBidPrice && lastBidPrice > 0) {
+      console.log('Price updated, enabling button', { currentPrice, lastBidPrice })
+      setIsUpdatingForm(false)
+    }
+    
+    setLastBidPrice(currentPrice)
+  }, [currentPrice, minBidAmount, setValue, isUpdatingForm, lastBidPrice])
+
   const placeBidMutation = useMutation({
     mutationFn: (data: { amount: number }) => 
       bidsApi.create({ auctionId, amount: data.amount, isAuto }),
-    onSuccess: () => {
+    onSuccess: (newBid, variables) => {
       toast({
         title: 'Bid placed successfully!',
         description: 'Your bid has been recorded.',
       })
-      queryClient.invalidateQueries({ queryKey: ['auction', auctionId] })
-      queryClient.invalidateQueries({ queryKey: ['auctions'] })
-      reset()
+      // Set updating state to disable button until price updates
+      setIsUpdatingForm(true)
+      
+      // Optimistic update - update bid list manually with pagination structure
+      queryClient.setQueryData(['bids', auctionId, 1, 20], (oldData: any) => {
+        if (!oldData) {
+          return {
+            bids: [newBid],
+            total: 1,
+            page: 1,
+            limit: 20,
+            totalPages: 1
+          }
+        }
+        
+        // Check if bid already exists (prevent duplicate from WebSocket)
+        const bidExists = oldData.bids?.some((bid: any) => bid.id === newBid.id)
+        if (bidExists) {
+          console.log('Bid already exists in cache (from WebSocket), skipping')
+          return oldData
+        }
+        
+        // Add new bid to the top of the list and increment total
+        return {
+          ...oldData,
+          bids: [newBid, ...(oldData.bids || [])],
+          total: oldData.total + 1
+        }
+      })
+      
+      // Safety timeout: Enable button after 2 seconds if WebSocket doesn't update
+      setTimeout(() => {
+        console.log('Timeout: Forcing button enable')
+        setIsUpdatingForm(false)
+      }, 2000)
+      
+      // WebSocket will update the currentPrice automatically
+      // No need to refetch auction data
       onSuccess?.()
     },
     onError: (error: any) => {
@@ -138,18 +189,22 @@ export function BidForm({
         <Button
           type="submit"
           className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-          disabled={placeBidMutation.isPending}
+          disabled={placeBidMutation.isPending || isUpdatingForm}
           onClick={() => setIsAuto(false)}
         >
           <TrendingUp className="w-4 h-4 mr-2" />
-          {placeBidMutation.isPending ? 'Placing Bid...' : 'Place Bid'}
+          {placeBidMutation.isPending 
+            ? 'Placing Bid...' 
+            : isUpdatingForm 
+            ? 'Updating...' 
+            : 'Place Bid'}
         </Button>
         
         {buyNowPrice && (
           <Button
             type="button"
             className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
-            disabled={placeBidMutation.isPending}
+            disabled={placeBidMutation.isPending || isUpdatingForm}
             onClick={() => {
               setValue('amount', buyNowPrice)
               handleSubmit(onSubmit)()
